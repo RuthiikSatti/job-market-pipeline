@@ -1,0 +1,8 @@
+version: 2
+
+sources:
+  - name: adzuna
+    database: JOB_MARKET_DB
+    schema: BRONZE
+    tables:
+      - name: raw_jobs

@@ -1,0 +1,24 @@
+# Secrets - NEVER commit these
+.env
+
+# Python virtual environment
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Logs and data files
+logs/
+data/
+*.log
+
+# dbt artifacts
+dbt_jobs/target/
+dbt_jobs/dbt_packages/
+dbt_jobs/logs/
+
+# OS files
+.DS_Store
+Thumbs.db
