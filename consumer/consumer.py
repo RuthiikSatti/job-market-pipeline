@@ -25,7 +25,7 @@ consumer = KafkaConsumer(
     value_deserializer=lambda x: json.loads(x.decode('utf-8'))
 )
 
-print("👂 Consumer listening for jobs in Kafka...")
+print("Consumer listening for jobs in Kafka...")
 
 for message in consumer:
     data = message.value
@@ -42,4 +42,4 @@ for message in consumer:
         length=len(content),
         content_type='application/json'
     )
-    print(f"💾 Saved to MinIO: {filename}")
+    print(f"Saved to MinIO: {filename}")

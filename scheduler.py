@@ -9,13 +9,13 @@ else:  # For Mac/Linux
     venv_python = os.path.join(".venv", "bin", "python")
 
 while True:
-    print(f"\n⏰ {time.strftime('%H:%M:%S')} - Moving MinIO data to Snowflake...")
+    print(f"\n{time.strftime('%H:%M:%S')} - Moving MinIO data to Snowflake...")
     try:
         # Force it to use the VENV Python
         subprocess.run([venv_python, "manual_bridge.py"], check=True)
-        print("✅ Ingestion cycle complete.")
+        print("Ingestion cycle complete.")
     except Exception as e:
-        print(f"⚠️ Scheduler Error: {e}")
+        print(f"Scheduler Error: {e}")
 
-    print("⏳ Waiting 10 minutes for next cycle...")
+    print("Waiting 10 minutes for next cycle...")
     time.sleep(600)

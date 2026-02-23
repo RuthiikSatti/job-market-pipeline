@@ -19,7 +19,7 @@ def stream_job_data():
         'what': 'data engineer analyst',
         'content-type': 'application/json'
     }
-    print(f"🚀 {time.strftime('%H:%M:%S')} - Fetching data...")
+    print(f"{time.strftime('%H:%M:%S')} - Fetching data...")
     response = requests.get(BASE_URL, params=params)
     if response.status_code == 200:
         jobs = response.json().get('results', [])
@@ -34,12 +34,12 @@ def stream_job_data():
             }
             producer.send('realtime_jobs', value=event)
         producer.flush()
-        print(f"✅ Streamed {len(jobs)} jobs.")
+        print(f"Streamed {len(jobs)} jobs.")
     else:
-        print(f"❌ Error {response.status_code}")
+        print(f"Error {response.status_code}")
 
 if __name__ == "__main__":
     while True:  # THIS IS THE CONTINUOUS LOOP
         stream_job_data()
-        print("⏳ Sleeping for 30 minutes...")
+        print("Sleeping for 30 minutes...")
         time.sleep(1800)

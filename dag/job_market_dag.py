@@ -31,7 +31,7 @@ def load_minio_to_snowflake():
         snowflake_hook.run(sql)
 
         # Optional: Delete or move the file in MinIO after success
-        print(f"✅ Loaded {obj.object_name} to Snowflake")
+        print(f"Loaded {obj.object_name} to Snowflake")
 
 default_args = {
     'owner': 'architect',

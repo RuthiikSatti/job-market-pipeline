@@ -22,14 +22,14 @@ conn = snowflake.connector.connect(
 cursor = conn.cursor()
 
 def push_to_snowflake():
-    print("🛰️ Connecting to MinIO...")
+    print("Connecting to MinIO...")
     # List all objects recursively to find jobs inside date folders
     objects = client.list_objects(BUCKET, recursive=True)
 
     count = 0
     for obj in objects:
         if obj.object_name.endswith('.json'):
-            print(f"📥 Processing {obj.object_name}...")
+            print(f"Processing {obj.object_name}...")
             response = client.get_object(BUCKET, obj.object_name)
             data = json.loads(response.read().decode('utf-8'))
 
@@ -40,13 +40,13 @@ def push_to_snowflake():
             try:
                 cursor.execute(sql)
                 count += 1
-                print(f"✅ Pushed to Snowflake: {obj.object_name}")
+                print(f"Pushed to Snowflake: {obj.object_name}")
             except Exception as e:
-                print(f"❌ Snowflake Error: {e}")
+                print(f"Snowflake Error: {e}")
 
     # CRITICAL: Save the changes
     conn.commit()
-    print(f"🏁 Finished. Total rows pushed: {count}")
+    print(f"Finished. Total rows pushed: {count}")
 
 if __name__ == "__main__":
     push_to_snowflake()
