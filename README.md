@@ -1,142 +1,84 @@
 # Job Market Pipeline
 
-A real-time data engineering pipeline that continuously collects job listings from the Adzuna API, streams them through Kafka, stores raw data in MinIO, loads into Snowflake, and transforms it using dbt — following the **Bronze → Silver → Gold** medallion architecture.
+A data pipeline that pulls job listings from the Adzuna API every 30 minutes, streams them through Kafka, stores them in MinIO, loads into Snowflake, and transforms the data using dbt.
 
 ---
 
-## Architecture
+## How it works
+
+1. `producer.py` calls the Adzuna API and pushes job listings into a Kafka topic
+2. `consumer.py` reads from Kafka and saves each job as a JSON file in MinIO
+3. `scheduler.py` runs `manual_bridge.py` every 10 minutes to move files from MinIO into Snowflake
+4. Once in Snowflake, dbt cleans and transforms the data into Silver and Gold tables
 
 ```
-EVERY 30 MINUTES:
-
-  Adzuna API
-      │  50 job listings (JSON)
-      ▼
-  producer.py ──► Kafka (topic: realtime_jobs) ──► consumer.py
-                                                         │
-                                                         ▼
-                                                  MinIO (bronze bucket)
-                                               jobs/YYYY-MM-DD/job_<id>.json
-                                                         │
-                                              scheduler.py (every 10 min)
-                                                         ▼
-                                               Snowflake BRONZE.RAW_JOBS
-                                                         │
-                                                      dbt run
-                                                         ▼
-                                            Silver: cleaned + deduplicated
-                                                         │
-                                                         ▼
-                                            Gold: top paying companies
+Adzuna API → Kafka → MinIO → Snowflake → dbt (Silver → Gold)
 ```
 
 ---
 
-## Tech Stack
+## Requirements
 
-| Layer | Tool | Purpose |
-|---|---|---|
-| Data Source | Adzuna API | Live job listings |
-| Streaming | Apache Kafka + Zookeeper | Message queue between producer and consumer |
-| Kafka UI | Kafdrop | Visual inspection of Kafka topics |
-| Raw Storage | MinIO (S3-compatible) | Bronze layer — stores raw JSON files |
-| Data Warehouse | Snowflake | SQL analytics on job data |
-| Scheduling | scheduler.py | Runs MinIO → Snowflake every 10 minutes |
-| Transformation | dbt (dbt-snowflake) | Silver and Gold layer SQL models |
-| Infrastructure | Docker + Docker Compose | Runs Kafka, Zookeeper, Kafdrop, MinIO locally |
+- Python 3.12 (specifically — 3.13+ breaks some packages)
+- Docker Desktop
+- A Snowflake account (free trial is fine)
+- Adzuna API credentials — sign up at https://developer.adzuna.com
 
 ---
 
-## Prerequisites
+## Getting started
 
-- **Python 3.12** (required — newer versions have compatibility issues with kafka-python and snowflake-connector)
-- **Docker Desktop** installed and running
-- **Snowflake account** (free trial works)
-- **Adzuna API credentials** — register free at https://developer.adzuna.com
-
----
-
-## Setup
-
-### 1. Clone the repo
+### 1. Clone and set up Python environment
 
 ```bash
 git clone https://github.com/RuthiikSatti/job-market-pipeline.git
 cd job-market-pipeline
-```
 
-### 2. Create a virtual environment with Python 3.12
-
-```bash
-# Windows
+# create venv with Python 3.12
 py -3.12 -m venv .venv
-.venv\Scripts\activate
 
-# Mac/Linux
-python3.12 -m venv .venv
-source .venv/bin/activate
-```
+# activate it
+.venv\Scripts\activate        # Windows
+source .venv/bin/activate     # Mac/Linux
 
-### 3. Install dependencies
-
-```bash
 pip install -r requirements.txt
 ```
 
-### 4. Set up your environment variables
-
-Copy the example file and fill in your credentials:
+### 2. Create your .env file
 
 ```bash
-# Windows
-copy .env.example .env
-
-# Mac/Linux
-cp .env.example .env
+copy .env.example .env    # Windows
+cp .env.example .env      # Mac/Linux
 ```
 
-Then open `.env` and fill in your values:
+Fill in the values:
 
 ```
-ADZUNA_APP_ID=your_adzuna_app_id
-ADZUNA_APP_KEY=your_adzuna_app_key
+ADZUNA_APP_ID=your_app_id
+ADZUNA_APP_KEY=your_app_key
 MINIO_ACCESS_KEY=admin
 MINIO_SECRET_KEY=password123
-SNOWFLAKE_USER=your_snowflake_username
-SNOWFLAKE_PASSWORD=your_snowflake_password
-SNOWFLAKE_ACCOUNT=your_account_id.region.aws
+SNOWFLAKE_USER=your_username
+SNOWFLAKE_PASSWORD=your_password
+SNOWFLAKE_ACCOUNT=your_account.region.aws
 ```
 
-> **Note:** `MINIO_ACCESS_KEY` and `MINIO_SECRET_KEY` match the values in `docker/docker-compose.yml`. Only change them if you update the compose file too.
+### 3. Set up Snowflake
 
----
-
-### 5. Set up Snowflake
-
-Log into your Snowflake account and run the following SQL to create the required database, schema, and table:
+Run this in your Snowflake worksheet:
 
 ```sql
--- Create database and schemas
 CREATE DATABASE JOB_MARKET_DB;
 CREATE SCHEMA JOB_MARKET_DB.BRONZE;
 
--- Create the raw jobs table (stores JSON as a VARIANT column)
 CREATE TABLE JOB_MARKET_DB.BRONZE.RAW_JOBS (
     raw_data VARIANT
 );
 ```
 
----
+### 4. Set up dbt
 
-### 6. Set up dbt
-
-Navigate into the dbt project and set up your profile:
-
-```bash
-cd dbt_jobs
-```
-
-Create a dbt profile file at `~/.dbt/profiles.yml` (outside the repo):
+Create `~/.dbt/profiles.yml` on your machine:
 
 ```yaml
 dbt_jobs:
@@ -144,9 +86,9 @@ dbt_jobs:
   outputs:
     dev:
       type: snowflake
-      account: your_account_id.region.aws
-      user: your_snowflake_username
-      password: your_snowflake_password
+      account: your_account.region.aws
+      user: your_username
+      password: your_password
       role: ACCOUNTADMIN
       database: JOB_MARKET_DB
       warehouse: COMPUTE_WH
@@ -154,162 +96,64 @@ dbt_jobs:
       threads: 1
 ```
 
-Test the connection:
-
-```bash
-dbt debug
-```
+Test it with `dbt debug` inside the `dbt_jobs` folder.
 
 ---
 
-## Running the Pipeline
+## Running it
 
-Open **4 separate terminals**, activate the venv in each, then run:
+You need 4 terminals open, all with the venv activated.
 
-### Terminal 1 — Start Docker services
-
+**Terminal 1 — start Docker**
 ```bash
 docker-compose -f docker/docker-compose.yml up -d
 ```
 
-Verify all 4 containers are running:
-
+**Terminal 2 — producer**
 ```bash
-docker ps
-```
-
-You should see: `zookeeper`, `kafka`, `kafdrop`, `minio`
-
-### Terminal 2 — Start the Producer (Adzuna → Kafka)
-
-```bash
-.venv\Scripts\activate       # Windows
-# source .venv/bin/activate  # Mac/Linux
-
 python producer/producer.py
 ```
 
-Expected output:
-```
-🚀 13:00:00 - Fetching data...
-✅ Streamed 50 jobs.
-⏳ Sleeping for 30 minutes...
-```
-
-### Terminal 3 — Start the Consumer (Kafka → MinIO)
-
+**Terminal 3 — consumer**
 ```bash
-.venv\Scripts\activate
 python consumer/consumer.py
 ```
 
-Expected output:
-```
-👂 Consumer listening for jobs in Kafka...
-💾 Saved to MinIO: jobs/2026-02-23/job_12345.json
-💾 Saved to MinIO: jobs/2026-02-23/job_12346.json
-...
-```
-
-### Terminal 4 — Start the Scheduler (MinIO → Snowflake, every 10 min)
-
+**Terminal 4 — scheduler**
 ```bash
-.venv\Scripts\activate
 python scheduler.py
 ```
 
-Expected output:
-```
-⏰ 13:00:05 - Moving MinIO data to Snowflake...
-✅ Pushed to Snowflake: jobs/2026-02-23/job_12345.json
-🏁 Finished. Total rows pushed: 50
-⏳ Waiting 10 minutes for next cycle...
-```
-
----
-
-## Running dbt Transformations
-
-Once data is in Snowflake, run dbt to build the Silver and Gold layers:
+Once data is flowing into Snowflake, run dbt:
 
 ```bash
 cd dbt_jobs
 dbt run
 ```
 
-This creates two tables in Snowflake:
-- `SILVER.job_data_silver` — cleaned, typed, deduplicated jobs
-- `GOLD.top_paying_companies` — companies ranked by average salary
+---
 
-To verify:
+## Useful URLs
 
-```bash
-dbt test
-```
+- Kafdrop (Kafka UI): http://localhost:9000
+- MinIO console: http://localhost:9001 — login: `admin` / `password123`
 
 ---
 
-## Monitoring UIs
-
-| UI | URL | What it shows |
-|---|---|---|
-| Kafdrop (Kafka) | http://localhost:9000 | Messages in the `realtime_jobs` topic |
-| MinIO Console | http://localhost:9001 | Raw JSON files in the bronze bucket |
-
-MinIO login: `admin` / `password123`
-
----
-
-## Project Structure
-
-```
-job-market-pipeline/
-├── producer/
-│   └── producer.py          # Fetches from Adzuna API → publishes to Kafka
-├── consumer/
-│   └── consumer.py          # Reads from Kafka → saves to MinIO
-├── dag/
-│   └── job_market_dag.py    # Airflow DAG (reference only)
-├── dbt_jobs/
-│   ├── dbt_project.yml
-│   └── models/
-│       ├── sources.yml
-│       ├── silver/
-│       │   └── job_data_silver.sql    # Clean + deduplicate
-│       └── gold/
-│           └── top_paying_companies.sql  # Business insights
-├── docker/
-│   └── docker-compose.yml   # Kafka, Zookeeper, Kafdrop, MinIO
-├── manual_bridge.py         # One-time MinIO → Snowflake load
-├── scheduler.py             # Runs manual_bridge.py every 10 minutes
-├── requirements.txt         # Python dependencies
-├── .env.example             # Environment variable template
-└── .gitignore
-```
-
----
-
-## Querying the Data in Snowflake
-
-After dbt runs, you can query the Gold layer directly in Snowflake:
+## Querying in Snowflake
 
 ```sql
--- Top paying companies
-SELECT * FROM JOB_MARKET_DB.GOLD.TOP_PAYING_COMPANIES
-ORDER BY average_min_salary DESC
-LIMIT 20;
+-- see cleaned job listings
+SELECT * FROM JOB_MARKET_DB.SILVER.JOB_DATA_SILVER LIMIT 50;
 
--- All cleaned job listings
-SELECT job_title, company_name, min_salary, full_location
-FROM JOB_MARKET_DB.SILVER.JOB_DATA_SILVER
-ORDER BY ingestion_time DESC;
+-- top paying companies
+SELECT * FROM JOB_MARKET_DB.GOLD.TOP_PAYING_COMPANIES ORDER BY average_min_salary DESC;
 ```
 
 ---
 
 ## Notes
 
-- `.env` is intentionally excluded from the repo — never commit real credentials
-- `data/` and `logs/` folders are also gitignored — they are generated at runtime
-- The `dag/` folder contains an Airflow DAG for reference; actual scheduling is handled by `scheduler.py`
-- Python 3.12 is required — `kafka-python` and `snowflake-connector-python` have known issues with Python 3.13+
+- `.env` is not included in the repo — use `.env.example` as a template
+- The `dag/` folder has an Airflow DAG that was part of the original design but scheduling is handled by `scheduler.py` instead
+- `data/` and `logs/` are gitignored since they're generated locally
