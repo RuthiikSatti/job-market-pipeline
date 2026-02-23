@@ -19,10 +19,35 @@ Adzuna API → Kafka → MinIO → Snowflake → dbt (Silver → Gold)
 
 ## Requirements
 
-- Python 3.12 (specifically — 3.13+ breaks some packages)
+- Python 3.12 specifically — 3.13+ breaks kafka-python and snowflake-connector-python
 - Docker Desktop
 - A Snowflake account (free trial is fine)
 - Adzuna API credentials — sign up at https://developer.adzuna.com
+
+---
+
+## Running on a Virtual Machine
+
+If you're running this on a VM (e.g. AWS EC2, Azure VM, or VirtualBox), make sure:
+
+1. The VM has at least **4GB RAM** — Kafka and Zookeeper together use about 1.5-2GB
+2. **Docker is installed** on the VM:
+   ```bash
+   sudo apt update
+   sudo apt install docker.io docker-compose -y
+   sudo usermod -aG docker $USER
+   # log out and back in after this
+   ```
+3. **Python 3.12 is installed**:
+   ```bash
+   sudo apt install python3.12 python3.12-venv -y
+   ```
+4. Open the following ports in your VM's firewall/security group if you want to access the UIs from your local browser:
+   - `9000` — Kafdrop
+   - `9001` — MinIO console
+   - `29092` — Kafka (if connecting externally)
+
+5. In `producer.py` and `consumer.py`, `localhost` refers to the machine running Docker. If Docker and your Python scripts are on the same VM, this works as-is. If they're on different machines, replace `localhost` with the internal IP of the Docker host.
 
 ---
 
@@ -35,11 +60,12 @@ git clone https://github.com/RuthiikSatti/job-market-pipeline.git
 cd job-market-pipeline
 
 # create venv with Python 3.12
-py -3.12 -m venv .venv
+py -3.12 -m venv .venv        # Windows
+python3.12 -m venv .venv      # Linux/Mac VM
 
 # activate it
 .venv\Scripts\activate        # Windows
-source .venv/bin/activate     # Mac/Linux
+source .venv/bin/activate     # Linux/Mac VM
 
 pip install -r requirements.txt
 ```
