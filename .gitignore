@@ -22,3 +22,6 @@ dbt_jobs/logs/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Assignment docs
+paper.md
