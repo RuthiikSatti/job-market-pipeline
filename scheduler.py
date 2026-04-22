@@ -9,7 +9,7 @@ else:  # For Mac/Linux
     venv_python = os.path.join(".venv", "bin", "python")
 
 while True:
-    print(f"\n{time.strftime('%H:%M:%S')} - Moving MinIO data to Snowflake...")
+    print(f"\n{time.strftime('%H:%M:%S')} - Moving MinIO data to PostgreSQL...")
     try:
         # Force it to use the VENV Python
         subprocess.run([venv_python, "manual_bridge.py"], check=True)

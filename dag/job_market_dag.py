@@ -1,11 +1,9 @@
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from airflow.providers.snowflake.operators.snowflake import SnowflakeOperator
-from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
+from airflow.providers.postgres.hooks.postgres import PostgresHook
 from minio import Minio
 from datetime import datetime, timedelta
 import json
-import os
 
 # MinIO Config (Inside Docker network)
 MINIO_ENDPOINT = "minio:9000"
@@ -13,25 +11,23 @@ MINIO_ACCESS_KEY = "admin"
 MINIO_SECRET_KEY = "password123"
 BUCKET_NAME = "bronze"
 
-def load_minio_to_snowflake():
-    """Fetch files from MinIO and push to Snowflake."""
+def load_minio_to_postgres():
+    """Fetch files from MinIO and push to PostgreSQL."""
     client = Minio(MINIO_ENDPOINT, access_key=MINIO_ACCESS_KEY, secret_key=MINIO_SECRET_KEY, secure=False)
-    snowflake_hook = SnowflakeHook(snowflake_conn_id='snowflake_default')
+    pg_hook = PostgresHook(postgres_conn_id='postgres_default')
 
     # List all objects in jobs/ folder
     objects = client.list_objects(BUCKET_NAME, prefix='jobs/', recursive=True)
 
     for obj in objects:
-        # Get the file content
         response = client.get_object(BUCKET_NAME, obj.object_name)
         data = json.loads(response.read().decode('utf-8'))
 
-        # Push to Snowflake
-        sql = f"INSERT INTO JOB_MARKET_DB.BRONZE.RAW_JOBS (raw_data) SELECT PARSE_JSON('{json.dumps(data).replace("'", "''")}')"
-        snowflake_hook.run(sql)
-
-        # Optional: Delete or move the file in MinIO after success
-        print(f"Loaded {obj.object_name} to Snowflake")
+        pg_hook.run(
+            "INSERT INTO bronze.raw_jobs (raw_data) VALUES (%s)",
+            parameters=(json.dumps(data),)
+        )
+        print(f"Loaded {obj.object_name} to PostgreSQL")
 
 default_args = {
     'owner': 'architect',
@@ -49,6 +45,6 @@ with DAG(
 ) as dag:
 
     load_task = PythonOperator(
-        task_id='load_jobs_to_snowflake',
-        python_callable=load_minio_to_snowflake
+        task_id='load_jobs_to_postgres',
+        python_callable=load_minio_to_postgres
     )

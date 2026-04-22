@@ -4,17 +4,22 @@ with bronze_data as (
 
 cleaned_jobs as (
   select
-    raw_data:job_id::string as job_id,
-    raw_data:title::string as job_title,
-    raw_data:company::string as company_name,
-    raw_data:salary::number as min_salary,
-    raw_data:location::string as full_location,
-    raw_data:timestamp::timestamp as ingestion_time
+    raw_data->>'job_id' as job_id,
+    raw_data->>'title' as job_title,
+    raw_data->>'company' as company_name,
+    (raw_data->>'salary')::numeric as min_salary,
+    raw_data->>'location' as full_location,
+    (raw_data->>'timestamp')::timestamp as ingestion_time
   from bronze_data
-  where raw_data:title is not null
+  where raw_data->>'title' is not null
+),
+
+deduplicated as (
+  select *,
+    row_number() over (partition by job_id order by ingestion_time desc) as rn
+  from cleaned_jobs
 )
 
--- Deduplicate data based on job_id
-select *
-from cleaned_jobs
-qualify row_number() over (partition by job_id order by ingestion_time desc) = 1
+select job_id, job_title, company_name, min_salary, full_location, ingestion_time
+from deduplicated
+where rn = 1

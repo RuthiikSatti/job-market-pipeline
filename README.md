@@ -1,6 +1,6 @@
 # Job Market Pipeline
 
-A data pipeline that pulls job listings from the Adzuna API every 30 minutes, streams them through Kafka, stores them in MinIO, loads into Snowflake, and transforms the data using dbt.
+A data pipeline that pulls job listings from the Adzuna API every 30 minutes, streams them through Kafka, stores them in MinIO, loads into PostgreSQL, and transforms the data using dbt.
 
 ---
 
@@ -8,20 +8,19 @@ A data pipeline that pulls job listings from the Adzuna API every 30 minutes, st
 
 1. `producer.py` calls the Adzuna API and pushes job listings into a Kafka topic
 2. `consumer.py` reads from Kafka and saves each job as a JSON file in MinIO
-3. `scheduler.py` runs `manual_bridge.py` every 10 minutes to move files from MinIO into Snowflake
-4. Once in Snowflake, dbt cleans and transforms the data into Silver and Gold tables
+3. `scheduler.py` runs `manual_bridge.py` every 10 minutes to move files from MinIO into PostgreSQL
+4. Once in PostgreSQL, dbt cleans and transforms the data into Silver and Gold tables
 
 ```
-Adzuna API → Kafka → MinIO → Snowflake → dbt (Silver → Gold)
+Adzuna API → Kafka → MinIO → PostgreSQL → dbt (Silver → Gold)
 ```
 
 ---
 
 ## Requirements
 
-- Python 3.12 specifically — 3.13+ breaks kafka-python and snowflake-connector-python
+- Python 3.12 specifically — 3.13+ breaks kafka-python
 - Docker Desktop
-- A Snowflake account (free trial is fine)
 - Adzuna API credentials — sign up at https://developer.adzuna.com
 
 ---
@@ -46,6 +45,7 @@ If you're running this on a VM (e.g. AWS EC2, Azure VM, or VirtualBox), make sur
    - `9000` — Kafdrop
    - `9001` — MinIO console
    - `29092` — Kafka (if connecting externally)
+   - `5432` — PostgreSQL (if connecting externally)
 
 5. In `producer.py` and `consumer.py`, `localhost` refers to the machine running Docker. If Docker and your Python scripts are on the same VM, this works as-is. If they're on different machines, replace `localhost` with the internal IP of the Docker host.
 
@@ -77,52 +77,24 @@ copy .env.example .env    # Windows
 cp .env.example .env      # Mac/Linux
 ```
 
-Fill in the values:
+Fill in your Adzuna credentials — everything else can stay as the defaults.
 
-```
-ADZUNA_APP_ID=your_app_id
-ADZUNA_APP_KEY=your_app_key
-MINIO_ACCESS_KEY=admin
-MINIO_SECRET_KEY=password123
-SNOWFLAKE_USER=your_username
-SNOWFLAKE_PASSWORD=your_password
-SNOWFLAKE_ACCOUNT=your_account.region.aws
+### 3. Start Docker (includes PostgreSQL)
+
+```bash
+docker-compose -f docker/docker-compose.yml up -d
 ```
 
-### 3. Set up Snowflake
-
-Run this in your Snowflake worksheet:
-
-```sql
-CREATE DATABASE JOB_MARKET_DB;
-CREATE SCHEMA JOB_MARKET_DB.BRONZE;
-
-CREATE TABLE JOB_MARKET_DB.BRONZE.RAW_JOBS (
-    raw_data VARIANT
-);
-```
+PostgreSQL starts automatically with the `job_market_db` database and the `bronze`, `silver`, and `gold` schemas already created via `docker/init.sql`.
 
 ### 4. Set up dbt
 
-Create `~/.dbt/profiles.yml` on your machine:
+The `~/.dbt/profiles.yml` is already configured for local PostgreSQL. Test it with:
 
-```yaml
-dbt_jobs:
-  target: dev
-  outputs:
-    dev:
-      type: snowflake
-      account: your_account.region.aws
-      user: your_username
-      password: your_password
-      role: ACCOUNTADMIN
-      database: JOB_MARKET_DB
-      warehouse: COMPUTE_WH
-      schema: SILVER
-      threads: 1
+```bash
+cd dbt_jobs
+dbt debug
 ```
-
-Test it with `dbt debug` inside the `dbt_jobs` folder.
 
 ---
 
@@ -150,7 +122,7 @@ python consumer/consumer.py
 python scheduler.py
 ```
 
-Once data is flowing into Snowflake, run dbt:
+Once data is flowing into PostgreSQL, run dbt:
 
 ```bash
 cd dbt_jobs
@@ -166,14 +138,24 @@ dbt run
 
 ---
 
-## Querying in Snowflake
+## Querying in PostgreSQL
+
+Connect with any PostgreSQL client (e.g. pgAdmin, DBeaver, or psql):
+
+```
+host: localhost
+port: 5432
+database: job_market_db
+user: postgres
+password: postgres
+```
 
 ```sql
 -- see cleaned job listings
-SELECT * FROM JOB_MARKET_DB.SILVER.JOB_DATA_SILVER LIMIT 50;
+SELECT * FROM silver.job_data_silver LIMIT 50;
 
 -- top paying companies
-SELECT * FROM JOB_MARKET_DB.GOLD.TOP_PAYING_COMPANIES ORDER BY average_min_salary DESC;
+SELECT * FROM gold.top_paying_companies ORDER BY average_min_salary DESC;
 ```
 
 ---
